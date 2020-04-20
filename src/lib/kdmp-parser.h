@@ -3,10 +3,8 @@
 
 #include "kdmp-parser-structs.h"
 #include <cstdint>
-#include <tchar.h>
-#include <windows.h>
-
 #include <unordered_map>
+#include "filemap.h"
 
 using Physmem_t = std::unordered_map<uint64_t, const uint8_t *>;
 
@@ -19,13 +17,19 @@ public:
   // Actually do the parsing of the file.
   //
 
-  bool Parse(const TCHAR *PathFile);
+  bool Parse(const char *PathFile);
 
   //
   // Give the Context record to the user.
   //
 
   const KDMP_PARSER_CONTEXT *GetContext();
+
+  //
+  // Get the type of dump.
+  //
+
+  DumpType_t GetDumpType();
 
   //
   // Get the physmem.
@@ -50,7 +54,6 @@ public:
   //
 
   void ShowAllStructures(const uint32_t Prefix) const;
-
 
   //
   // Get the content of a physical address.
@@ -84,22 +87,10 @@ private:
   bool MapFile();
 
   //
-  // Handle to the input file.
+  // The mapped file.
   //
 
-  HANDLE File_;
-
-  //
-  // Handle to the file mapping.
-  //
-
-  HANDLE FileMap_;
-
-  //
-  // Base address of the file view.
-  //
-
-  PVOID ViewBase_;
+  FileMap FileMap_;
 
   //
   // Header of the crash-dump.
@@ -111,7 +102,7 @@ private:
   // File path to the crash-dump.
   //
 
-  const TCHAR *PathFile_;
+  const char *PathFile_;
 
   //
   // Mapping between physical addresses / page data.

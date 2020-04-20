@@ -1,10 +1,11 @@
+# Axel '0vercl0k' Souchet - April 19 2020
 version: 1.0.{build}
 
 image:
   - Visual Studio 2019
 
 configuration:
-  - Release
+  - RelWithDebInfo
   - Debug
 
 platform:
@@ -13,16 +14,12 @@ platform:
 
 clone_folder: c:\projects\kdmp-parser
 
-build:
-  project: c:\projects\kdmp-parser\src\kdmp-parser.sln
+build_script:
+  - cmd: C:\Python38-x64\python.exe builder.py --configuration %configuration% --arch %platform% --run-tests
 
-# this happens in the clone_folder
 after_build:
-  - cmd: if "%platform%"=="x86" if "%configuration%"=="Release" 7z a -t7z kdmp-parser-x86.release.7z src\%configuration%\*
-  - cmd: if "%platform%"=="x86" if "%configuration%"=="Debug" 7z a -t7z kdmp-parser-x86.debug.7z src\%configuration%\*
-  - cmd: if "%platform%"=="x64" if "%configuration%"=="Release" 7z a -t7z kdmp-parser-x64.release.7z src\x64\%configuration%\*
-  - cmd: if "%platform%"=="x64" if "%configuration%"=="Debug" 7z a -t7z kdmp-parser-x64.debug.7z src\x64\%configuration%\*
-  - cmd: C:\Python38-x64\python.exe run-tests.py
+  - cmd: cd %APPVEYOR_BUILD_FOLDER%
+  - cmd: 7z a -t7z kdmp-parser-%platform%.%configuration%.7z bin\%platform%-%configuration%\*
   - cmd: chdir
 
 artifacts:

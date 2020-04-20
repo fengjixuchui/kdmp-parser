@@ -1,6 +1,7 @@
 # kdmp-parser
 
 [![Build status](https://ci.appveyor.com/api/projects/status/rokkikt05y8fmk5b?svg=true)](https://ci.appveyor.com/project/0vercl0k/kdmp-parser)
+[![Build Status](https://travis-ci.org/0vercl0k/kdmp-parser.svg?branch=master)](https://travis-ci.org/0vercl0k/kdmp-parser)
 
 This is a small C++ library able to parse Windows kernel full dump (`.dump /f` in WinDbg) as well as BMP dump (`.dump /ka` in WinDbg). The format has been introduced around Windows 8 timeframe according to the [rekall](https://github.com/google/rekall) project. Note that most of the structures used in [kdmp-parser-structs.h](https://github.com/0vercl0k/kdmp-parser/blob/master/src/kdmp-parser/kdmp-parser-structs.h) have been adapted / taken from the [rekall](https://github.com/google/rekall) project and their [Python implementation](https://github.com/google/rekall/blob/master/rekall-core/rekall/plugins/overlays/windows/crashdump.py).
 
@@ -88,111 +89,226 @@ Physical memory:
 
 ## Building
 
-You can build it using [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/) by opening the `kdmp-parser.sln` solution file or via command line using `msbuild` (from a Visual Studio shell):
+### Linux
+
+You can build it via the command line using `builder.py` or invoking `cmake` yourself (also works in WSL):
 
 ```text
-kdmp-parser\src>msbuild -t:Build -p:Configuration=Debug
-Microsoft (R) Build Engine version 16.4.0+e901037fe for .NET Framework
-Copyright (C) Microsoft Corporation. All rights reserved.
+over@oof:/kdmp-parser$ python3 builder.py -h
+usage: Build and run test [-h] [--run-tests]
+                          [--configuration {Debug,RelWithDebInfo}]
+                          [--arch {x64,x86}]
 
-Building the projects in this solution one at a time. To enable parallel build, please add the "-m" switch.
-Build started 2/16/2020 3:44:32 PM.
-Project "c:\work\codes\kdmp-parser\src\kdmp-parser.sln" on node 1 (Build target(s)).
-ValidateSolutionConfiguration:
-  Building solution configuration "Debug|x64".
-Project "c:\work\codes\kdmp-parser\src\kdmp-parser.sln" (1) is building "c:\work\codes\kdmp-parser\src\test\test.vcxproj.metaproj" (2) on node 1 (default targets).
-Project "c:\work\codes\kdmp-parser\src\test\test.vcxproj.metaproj" (2) is building "c:\work\codes\kdmp-parser\src\kdmp-parser\kdmp-parser.vcxproj" (3) on node 1 (default targets).
-InitializeBuildStatus:
-  Creating "x64\Debug\kdmp-parser.tlog\unsuccessfulbuild" because "AlwaysCreate" was specified.
-ClCompile:
-  All outputs are up-to-date.
-Lib:
-  All outputs are up-to-date.
-  kdmp-parser.vcxproj -> c:\work\codes\kdmp-parser\src\x64\Debug\kdmp-parser.lib
-FinalizeBuildStatus:
-  Deleting file "x64\Debug\kdmp-parser.tlog\unsuccessfulbuild".
-  Touching "x64\Debug\kdmp-parser.tlog\kdmp-parser.lastbuildstate".
-Done Building Project "c:\work\codes\kdmp-parser\src\kdmp-parser\kdmp-parser.vcxproj" (default targets).
+optional arguments:
+  -h, --help            show this help message and exit
+  --run-tests
+  --configuration {Debug,RelWithDebInfo}
+  --arch {x64,x86}
 
-Project "c:\work\codes\kdmp-parser\src\test\test.vcxproj.metaproj" (2) is building "c:\work\codes\kdmp-parser\src\test\test.vcxproj" (4) on node 1 (default targets).
-InitializeBuildStatus:
-  Creating "x64\Debug\test.tlog\unsuccessfulbuild" because "AlwaysCreate" was specified.
-ClCompile:
-  All outputs are up-to-date.
-Link:
-  All outputs are up-to-date.
-  test.vcxproj -> c:\work\codes\kdmp-parser\src\x64\Debug\test.exe
-FinalizeBuildStatus:
-  Deleting file "x64\Debug\test.tlog\unsuccessfulbuild".
-  Touching "x64\Debug\test.tlog\test.lastbuildstate".
-Done Building Project "c:\work\codes\kdmp-parser\src\test\test.vcxproj" (default targets).
+over@oof:/kdmp-parser$ python3 builder.py --configuration Debug
+-- The C compiler identification is GNU 7.4.0
+-- The CXX compiler identification is GNU 7.4.0
+-- Check for working C compiler: /usr/bin/cc
+-- Check for working C compiler: /usr/bin/cc -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: /usr/bin/c++
+-- Check for working CXX compiler: /usr/bin/c++ -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /kdmp-parser/build/linx64-Debug
+[6/6] Linking CXX executable ../../bin/linx64-Debug/testapp
+-- The C compiler identification is GNU 7.4.0
+-- The CXX compiler identification is GNU 7.4.0
+-- Check for working C compiler: /usr/bin/cc
+-- Check for working C compiler: /usr/bin/cc -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: /usr/bin/c++
+-- Check for working CXX compiler: /usr/bin/c++ -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /kdmp-parser/build/linx86-Debug
+[6/6] Linking CXX executable ../../bin/linx86-Debug/testapp
 
-Done Building Project "c:\work\codes\kdmp-parser\src\test\test.vcxproj.metaproj" (default targets).
+over@oof:/kdmp-parser/$ cd build/
+over@oof:/kdmp-parser/build$ mkdir linx64-RelWithDebInfo/
+over@oof:/kdmp-parser/build$ cd linx64-RelWithDebInfo/
+over@oof:/kdmp-parser/build/linx64-RelWithDebInfo$ cmake --DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/kdmp-parser/bin/linx64-RelWithDebInfo -DCMAKE_BUILD_TYPE=RelWithDebInfo ../../
+-- The C compiler identification is GNU 7.4.0
+-- The CXX compiler identification is GNU 7.4.0
+-- Check for working C compiler: /usr/bin/cc
+-- Check for working C compiler: /usr/bin/cc -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: /usr/bin/c++
+-- Check for working CXX compiler: /usr/bin/c++ -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /kdmp-parser/build/linx64-RelWithDebInfo
 
-Done Building Project "c:\work\codes\kdmp-parser\src\kdmp-parser.sln" (Build target(s)).
+over@oof:/kdmp-parser/build/linx64-RelWithDebInfo$ cmake --build .
+```
 
+### Windows
 
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
+You can build it using [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/) by either using the "Open the folder" option or via command line using `builder.py` or `cmake` directly (from a Visual Studio shell):
 
-Time Elapsed 00:00:00.52
+```text
+kdmp-parser>python builder.py --configuration Debug
+-- The C compiler identification is MSVC 19.25.28614.0
+-- The CXX compiler identification is MSVC 19.25.28614.0
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: kdmp-parser/build/x64-Debug
+[6/6] Linking CXX executable ..\..\bin\x64-Debug\testapp.exe
+-- The C compiler identification is MSVC 19.25.28614.0
+-- The CXX compiler identification is MSVC 19.25.28614.0
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: kdmp-parser/build/x86-Debug
+[6/6] Linking CXX executable ..\..\bin\x86-Debug\testapp.exe
+
+kdmp-parser>cd build
+kdmp-parser\build>mkdir x64-RelWithDebInfo
+kdmp-parser\build>cd x64-RelWithDebInfo
+kdmp-parser\build\x64-RelWithDebInfo>cmake -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=c:\kdmp-parser\bin\x64-RelWithDebInfo -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja ..\..\
+-- The C compiler identification is MSVC 19.25.28614.0
+-- The CXX compiler identification is MSVC 19.25.28614.0
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: kdmp-parser/build/x64-RelWithDebInfo
+
+kdmp-parser\build\x64-RelWithDebInfo>cmake --build .
+[6/6] Linking CXX executable ..\..\bin\x64-RelWithDebInfo\parser.exe
+
+kdmp-parser\build\x64-RelWithDebInfo>..\..\bin\x64-RelWithDebInfo\parser.exe
+You didn't provide the path to the dump file.
+
+parser.exe [-p [<physical address>]] [-c] [-e] [-h] <kdump path>
+
+Examples:
+  Show every structures of the dump:
+    parser.exe -a full.dmp
+
+  Show the context record:
+    parser.exe -c full.dmp
+
+  Show the exception record:
+    parser.exe -e full.dmp
+
+  Show all the physical memory (first 16 bytes of every pages):
+    parser.exe -p full.dmp
+
+  Show the context record as well as the page at physical address 0x1000:
+    parser.exe -c -p 0x1000 full.dmp
 ```
 
 ## Testing
 
-You can run `run-tests.py` from a Visual Studio command prompt to run basic tests. First, it builds every platform / configuration combination via `msbuild`, then it downloads two kernel dumps (one full dump and one bitmap dump) and runs every flavor of `test.exe` against the dumps.
+You can run `builder.py` with the `--run-tests` flag to run basic tests. First, it builds the matrix, then it downloads two kernel dumps (one full dump and one bitmap dump) and runs every flavor of the `testapp` application against the dumps.
 
 ```text
-kdmp-parser>python run-tests.py
-Microsoft (R) Build Engine version 16.4.0+e901037fe for .NET Framework
-Copyright (C) Microsoft Corporation. All rights reserved.
-[...]
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
-
-Time Elapsed 00:00:00.54
-Microsoft (R) Build Engine version 16.4.0+e901037fe for .NET Framework
-Copyright (C) Microsoft Corporation. All rights reserved.
-[...]
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
-
-Time Elapsed 00:00:00.55
-Microsoft (R) Build Engine version 16.4.0+e901037fe for .NET Framework
-Copyright (C) Microsoft Corporation. All rights reserved.
-[...]
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
-
-Time Elapsed 00:00:00.53
-Microsoft (R) Build Engine version 16.4.0+e901037fe for .NET Framework
-Copyright (C) Microsoft Corporation. All rights reserved.
-[...]
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
-
-Time Elapsed 00:00:00.52
-Successfully downloaded the test datas in C:\Users\over\AppData\Local\Temp\tmps0xoj46o, extracting..
-Launching "src\x64\Release\test.exe C:\work\codes\kdmp-parser\full.dmp"..
+kdmp-parser>python builder.py --configuration RelWithDebInfo --run-tests
+-- The C compiler identification is MSVC 19.25.28614.0
+-- The CXX compiler identification is MSVC 19.25.28614.0
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: kdmp-parser/build/x64-RelWithDebInfo
+[6/6] Linking CXX executable ..\..\bin\x64-RelWithDebInfo\parser.exe
+-- The C compiler identification is MSVC 19.25.28614.0
+-- The CXX compiler identification is MSVC 19.25.28614.0
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe
+-- Check for working C compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe
+-- Check for working CXX compiler: C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx86/x86/cl.exe -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: kdmp-parser/build/x86-RelWithDebInfo
+[6/6] Linking CXX executable ..\..\bin\x86-RelWithDebInfo\testapp.exe
+Downloading https://github.com/0vercl0k/kdmp-parser/releases/download/v0.1/testdatas.zip..
+Successfully downloaded the test datas in C:\Users\over\AppData\Local\Temp\tmp5o25eqtd, extracting..
+Launching "bin\x64-RelWithDebInfo\testapp C:\Users\over\AppData\Local\Temp\full.dmp"..
 GPRs matches the testdatas.
-Launching "src\x64\Debug\test.exe C:\work\codes\kdmp-parser\full.dmp"..
+Launching "bin\x86-RelWithDebInfo\testapp C:\Users\over\AppData\Local\Temp\full.dmp"..
 GPRs matches the testdatas.
-Launching "src\Release\test.exe C:\work\codes\kdmp-parser\full.dmp"..
+Launching "bin\x64-RelWithDebInfo\testapp C:\Users\over\AppData\Local\Temp\bmp.dmp"..
 GPRs matches the testdatas.
-Launching "src\Debug\test.exe C:\work\codes\kdmp-parser\full.dmp"..
-GPRs matches the testdatas.
-Launching "src\x64\Release\test.exe C:\work\codes\kdmp-parser\bmp.dmp"..
-GPRs matches the testdatas.
-Launching "src\x64\Debug\test.exe C:\work\codes\kdmp-parser\bmp.dmp"..
-GPRs matches the testdatas.
-Launching "src\Release\test.exe C:\work\codes\kdmp-parser\bmp.dmp"..
-GPRs matches the testdatas.
-Launching "src\Debug\test.exe C:\work\codes\kdmp-parser\bmp.dmp"..
+Launching "bin\x86-RelWithDebInfo\testapp C:\Users\over\AppData\Local\Temp\bmp.dmp"..
 GPRs matches the testdatas.
 All good!
 ```
