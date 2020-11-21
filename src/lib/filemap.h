@@ -1,30 +1,29 @@
 // Axel '0vercl0k' Souchet - April 28 2020
 #include "platform.h"
+#include <cstdio>
 
 #if defined(WINDOWS)
-class FileMap {
+class FileMap_t {
   //
   // Handle to the input file.
   //
 
-  HANDLE File_;
+  HANDLE File_ = nullptr;
 
   //
   // Handle to the file mapping.
   //
 
-  HANDLE FileMap_;
+  HANDLE FileMap_ = nullptr;
 
   //
   // Base address of the file view.
   //
 
-  PVOID ViewBase_;
+  PVOID ViewBase_ = nullptr;
 
 public:
-  FileMap() : File_(nullptr), FileMap_(nullptr), ViewBase_(nullptr) {}
-
-  ~FileMap() {
+  ~FileMap_t() {
     //
     // Unmap the view of the mapping..
     //
@@ -52,6 +51,10 @@ public:
       File_ = nullptr;
     }
   }
+
+  FileMap_t() = default;
+  FileMap_t(const FileMap_t &) = delete;
+  FileMap_t &operator=(const FileMap_t &) = delete;
 
   void *ViewBase() { return ViewBase_; }
 
@@ -139,15 +142,6 @@ public:
   clean:
 
     //
-    // Unmap the view of the mapping..
-    //
-
-    if (ViewBase != nullptr) {
-      UnmapViewOfFile(ViewBase);
-      ViewBase = nullptr;
-    }
-
-    //
     // Close the handle to the file mapping..
     //
 
@@ -173,20 +167,18 @@ public:
 
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
-class FileMap {
-  void *ViewBase_;
-  off_t ViewSize_;
-  int Fd_;
+class FileMap_t {
+  void *ViewBase_ = nullptr;
+  off_t ViewSize_ = 0;
+  int Fd_ = -1;
 
 public:
-  FileMap() : ViewBase_(nullptr), ViewSize_(0), Fd_(-1) {}
-
-  ~FileMap() {
+  ~FileMap_t() {
     if (ViewBase_) {
       munmap(ViewBase_, ViewSize_);
       ViewBase_ = nullptr;
@@ -198,6 +190,10 @@ public:
       Fd_ = -1;
     }
   }
+
+  FileMap_t() = default;
+  FileMap_t(const FileMap_t &) = delete;
+  FileMap_t &operator=(const FileMap_t &) = delete;
 
   void *ViewBase() { return ViewBase_; }
 

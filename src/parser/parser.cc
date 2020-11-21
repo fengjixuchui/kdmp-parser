@@ -2,6 +2,7 @@
 #include "kdmp-parser.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <vector>
 
@@ -23,58 +24,49 @@ struct Options_t {
   // This is enabled if -h is used.
   //
 
-  bool ShowHelp;
+  bool ShowHelp = false;
 
   //
   // This is enabled if -c is used.
   //
 
-  bool ShowContextRecord;
+  bool ShowContextRecord = false;
 
   //
   // This is enabled if -a is used.
   //
 
-  bool ShowAllStructures;
+  bool ShowAllStructures = false;
 
   //
   // This is enabled if -e is used.
   //
 
-  bool ShowExceptionRecord;
+  bool ShowExceptionRecord = false;
 
   //
   // This is enable if -p is used.
   //
 
-  bool ShowPhysicalMem;
+  bool ShowPhysicalMem = false;
 
   //
   // This is on if the user specified a physical address.
   //
 
-  bool HasPhysicalAddress;
+  bool HasPhysicalAddress = false;
 
   //
   // If an optional physical address has been passed to -p then this is the
   // physical address.
 
-  uint64_t PhysicalAddress;
+  uint64_t PhysicalAddress = 0;
 
   //
   // The path to the dump file.
   //
 
-  char *DumpPath;
-
-  //
-  // Initialize all teh things!
-  //
-
-  Options_t()
-      : ShowHelp(false), ShowContextRecord(false), ShowPhysicalMem(false),
-        ShowAllStructures(false), ShowExceptionRecord(false),
-        HasPhysicalAddress(0), PhysicalAddress(0), DumpPath(nullptr) {}
+  char *DumpPath = nullptr;
 };
 
 //
@@ -266,7 +258,7 @@ int main(int argc, const char *argv[]) {
   // Create the parser instance.
   //
 
-  KernelDumpParser Dmp;
+  kdmpparser::KernelDumpParser Dmp;
 
   //
   // Parse the dump file.
@@ -340,15 +332,15 @@ int main(int argc, const char *argv[]) {
       // so that it is nicer for the user as they probably don't expect unorder.
       //
 
-      const Physmem_t &Physmem = Dmp.GetPhysmem();
-      std::vector<Physmem_t::key_type> OrderedPhysicalAddresses;
+      const kdmpparser::Physmem_t &Physmem = Dmp.GetPhysmem();
+      std::vector<kdmpparser::Physmem_t::key_type> OrderedPhysicalAddresses;
       OrderedPhysicalAddresses.reserve(Physmem.size());
 
       //
       // Stuff the physical addresses in a vector.
       //
 
-      for (const auto [PhysicalAddress, _] : Dmp.GetPhysmem()) {
+      for (const auto &[PhysicalAddress, _] : Dmp.GetPhysmem()) {
         OrderedPhysicalAddresses.emplace_back(PhysicalAddress);
       }
 

@@ -1,16 +1,7 @@
 // Axel '0vercl0k' Souchet - February 15 2019
 #include "kdmp-parser.h"
 
-KernelDumpParser::KernelDumpParser() : DmpHdr_(nullptr), PathFile_(nullptr) {}
-
-KernelDumpParser::~KernelDumpParser() {
-
-  //
-  // Empty out the physmem.
-  //
-
-  Physmem_.clear();
-}
+namespace kdmpparser {
 
 bool KernelDumpParser::Parse(const char *PathFile) {
 
@@ -42,12 +33,12 @@ bool KernelDumpParser::Parse(const char *PathFile) {
   // Retrieve the physical memory according to the type of dump we have.
   //
 
-  if (DmpHdr_->DumpType == FullDump) {
+  if (DmpHdr_->DumpType == DumpType_t::FullDump) {
     if (!BuildPhysmemFullDump()) {
       printf("BuildPhysmemFullDump failed.\n");
       return false;
     }
-  } else if (DmpHdr_->DumpType == BMPDump) {
+  } else if (DmpHdr_->DumpType == DumpType_t::BMPDump) {
     if (!BuildPhysmemBMPDump()) {
       printf("BuildPhysmemBMPDump failed.\n");
       return false;
@@ -60,10 +51,10 @@ bool KernelDumpParser::Parse(const char *PathFile) {
 bool KernelDumpParser::ParseDmpHeader() {
 
   //
-  // The base of the view points on the DMP_HEADER64.
+  // The base of the view points on the HEADER64.
   //
 
-  DmpHdr_ = (KDMP_PARSER_HEADER64 *)FileMap_.ViewBase();
+  DmpHdr_ = (HEADER64 *)FileMap_.ViewBase();
 
   //
   // Now let's make sure the structures look right.
@@ -77,13 +68,27 @@ bool KernelDumpParser::ParseDmpHeader() {
   return true;
 }
 
-const KDMP_PARSER_CONTEXT *KernelDumpParser::GetContext() {
+const CONTEXT *KernelDumpParser::GetContext() {
 
   //
   // Give the user a view of the context record.
   //
 
   return &DmpHdr_->ContextRecord;
+}
+
+const BugCheckParameters_t KernelDumpParser::GetBugCheckParameters() {
+
+  //
+  // Give the user a view of the bugcheck parameters.
+  //
+
+  BugCheckParameters_t Parameters = {
+      DmpHdr_->BugCheckCode,
+      {DmpHdr_->BugCheckCodeParameter[0], DmpHdr_->BugCheckCodeParameter[1],
+       DmpHdr_->BugCheckCodeParameter[2], DmpHdr_->BugCheckCodeParameter[3]}};
+
+  return Parameters;
 }
 
 DumpType_t KernelDumpParser::GetDumpType() { return DmpHdr_->DumpType; }
@@ -150,8 +155,7 @@ bool KernelDumpParser::BuildPhysmemFullDump() {
     // Grab the current run as well as its base page and page count.
     //
 
-    const KDMP_PARSER_PHYSMEM_RUN *Run =
-        DmpHdr_->PhysicalMemoryBlockBuffer.Run + RunIdx;
+    const PHYSMEM_RUN *Run = DmpHdr_->PhysicalMemoryBlockBuffer.Run + RunIdx;
 
     const uint64_t BasePage = Run->BasePage;
     const uint64_t PageCount = Run->PageCount;
@@ -217,10 +221,27 @@ bool KernelDumpParser::BuildPhysmemFullDump() {
   return true;
 }
 
+uint64_t KernelDumpParser::PhyRead8(const uint64_t PhysicalAddress) const {
+
+  //
+  // Get the physical page and read from the offset.
+  //
+
+  const uint8_t *PhysicalPage = GetPhysicalPage(Page::Align(PhysicalAddress));
+
+  if (!PhysicalPage) {
+    printf("Internal page table parsing failed!\n");
+    return 0;
+  }
+
+  return *reinterpret_cast<const uint64_t *>(PhysicalPage +
+                                             Page::Offset(PhysicalAddress));
+}
+
 const Physmem_t &KernelDumpParser::GetPhysmem() { return Physmem_; }
 
 void KernelDumpParser::ShowContextRecord(const uint32_t Prefix = 0) const {
-  const KDMP_PARSER_CONTEXT &Context = DmpHdr_->ContextRecord;
+  const CONTEXT &Context = DmpHdr_->ContextRecord;
   printf("%*srax=%016" PRIx64 " rbx=%016" PRIx64 " rcx=%016" PRIx64 "\n",
          Prefix, "", Context.Rax, Context.Rbx, Context.Rcx);
   printf("%*srdx=%016" PRIx64 " rsi=%016" PRIx64 " rdi=%016" PRIx64 "\n",
@@ -301,6 +322,10 @@ void KernelDumpParser::ShowAllStructures(const uint32_t Prefix = 0) const {
   DmpHdr_->Show(Prefix);
 }
 
+uint64_t KernelDumpParser::GetDirectoryTableBase() const {
+  return DmpHdr_->DirectoryTableBase;
+}
+
 const uint8_t *
 KernelDumpParser::GetPhysicalPage(const uint64_t PhysicalAddress) const {
 
@@ -308,7 +333,7 @@ KernelDumpParser::GetPhysicalPage(const uint64_t PhysicalAddress) const {
   // Attempt to find the physical address.
   //
 
-  Physmem_t::const_iterator Pair = Physmem_.find(PhysicalAddress);
+  const Physmem_t::const_iterator Pair = Physmem_.find(PhysicalAddress);
 
   //
   // If it doesn't exist then return nullptr.
@@ -324,3 +349,104 @@ KernelDumpParser::GetPhysicalPage(const uint64_t PhysicalAddress) const {
 
   return Pair->second;
 }
+
+uint64_t
+KernelDumpParser::VirtTranslate(const uint64_t VirtualAddress,
+                                const uint64_t DirectoryTableBase) const {
+
+  //
+  // If DirectoryTableBase is null ; use the one from the dump header and clear
+  // PCID bits (bits 11:0).
+  //
+
+  uint64_t LocalDTB = Page::Align(GetDirectoryTableBase());
+
+  if (DirectoryTableBase) {
+    LocalDTB = Page::Align(DirectoryTableBase);
+  }
+
+  //
+  // Stole code from @yrp604 and @0vercl0k.
+  //
+
+  const VIRTUAL_ADDRESS GuestAddress(VirtualAddress);
+  const MMPTE_HARDWARE Pml4(LocalDTB);
+  const uint64_t Pml4Base = Pml4.u.PageFrameNumber * Page::Size;
+  const uint64_t Pml4eGpa = Pml4Base + GuestAddress.u.Pml4Index * 8;
+  const MMPTE_HARDWARE Pml4e(PhyRead8(Pml4eGpa));
+  if (!Pml4e.u.Present) {
+    printf("Invalid page map level 4, address translation failed!\n");
+    return 0;
+  }
+
+  const uint64_t PdptBase = Pml4e.u.PageFrameNumber * Page::Size;
+  const uint64_t PdpteGpa = PdptBase + GuestAddress.u.PdPtIndex * 8;
+  const MMPTE_HARDWARE Pdpte(PhyRead8(PdpteGpa));
+  if (!Pdpte.u.Present) {
+    printf(
+        "Invalid page directory pointer table, address translation failed!\n");
+    return 0;
+  }
+
+  //
+  // huge pages:
+  // 7 (PS) - Page size; must be 1 (otherwise, this entry references a page
+  // directory; see Table 4-1
+  //
+
+  const uint64_t PdBase = Pdpte.u.PageFrameNumber * Page::Size;
+  if (Pdpte.u.LargePage) {
+    return (PdBase & 0xffff'ffff'c000'0000) + (VirtualAddress & 0x3fff'ffff);
+  }
+
+  const uint64_t PdeGpa = PdBase + GuestAddress.u.PdIndex * 8;
+  const MMPTE_HARDWARE Pde(PhyRead8(PdeGpa));
+  if (!Pde.u.Present) {
+    printf("Invalid page directory entry, address translation failed!\n");
+    return 0;
+  }
+
+  //
+  // large pages:
+  // 7 (PS) - Page size; must be 1 (otherwise, this entry references a page
+  // table; see Table 4-18
+  //
+
+  const uint64_t PtBase = Pde.u.PageFrameNumber * Page::Size;
+  if (Pde.u.LargePage) {
+    return (PtBase & 0xffff'ffff'ffe0'0000) + (VirtualAddress & 0x1f'ffff);
+  }
+
+  const uint64_t PteGpa = PtBase + GuestAddress.u.PtIndex * 8;
+  const MMPTE_HARDWARE Pte(PhyRead8(PteGpa));
+  if (!Pte.u.Present) {
+    printf("Invalid page table entry, address translation failed!\n");
+    return 0;
+  }
+
+  const uint64_t PageBase = Pte.u.PageFrameNumber * 0x1000;
+  return PageBase + GuestAddress.u.Offset;
+}
+
+const uint8_t *
+KernelDumpParser::GetVirtualPage(const uint64_t VirtualAddress,
+                                 const uint64_t DirectoryTableBase) const {
+
+  //
+  // First remove offset and translate the virtual address.
+  //
+
+  const uint64_t PhysicalAddress =
+      VirtTranslate(Page::Align(VirtualAddress), DirectoryTableBase);
+
+  if (!PhysicalAddress) {
+    return nullptr;
+  }
+
+  //
+  // Then get the physical page.
+  //
+
+  return GetPhysicalPage(PhysicalAddress);
+}
+} // namespace kdmpparser

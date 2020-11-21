@@ -7,18 +7,20 @@
 #include <cstdint>
 #include <cstdio>
 
-#ifndef WINDOWS
-#define EXCEPTION_MAXIMUM_PARAMETERS 15
-struct EXCEPTION_RECORD64 {
-  uint32_t ExceptionCode;
-  uint32_t ExceptionFlags;
-  uint64_t ExceptionRecord;
-  uint64_t ExceptionAddress;
-  uint32_t NumberParameters;
-  uint32_t __unusedAlignment;
-  uint64_t ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
+namespace kdmpparser {
+
+//
+// We need a way to represent 128-bits integers so here goes.
+//
+
+struct uint128_t {
+  uint64_t Low;
+  uint64_t High;
 };
-#endif
+
+static_assert(sizeof(uint128_t) == 16, "uint128_t's size looks wrong.");
+
+enum class DumpType_t : uint32_t { FullDump = 1, KernelDump = 2, BMPDump = 5 };
 
 //
 // Save off the alignement setting and disable
@@ -29,21 +31,8 @@ struct EXCEPTION_RECORD64 {
 #pragma pack(1)
 
 //
-// We need a way to represent 128bits integers so here goes.
-//
-
-struct uint128_t {
-  uint64_t Low;
-  uint64_t High;
-};
-
-static_assert(sizeof(uint128_t) == 16, "uint128_t's size looks wrong.");
-
-enum DumpType_t : uint32_t { FullDump = 1, KernelDump = 2, BMPDump = 5 };
-
-//
 // All the display utilities are in this class because long story short template
-// functions were breaking my balls. If you know a cleaner way to do this, hit
+// functions were not cooperating. If you know a cleaner way to do this, hit
 // me up :)
 //
 
@@ -114,16 +103,16 @@ struct DisplayUtils {
                     const void *This, const DumpType_t *Field) const {
     DisplayHeader(Prefix, FieldName, This, Field);
     switch (*Field) {
-    case KernelDump: {
+    case DumpType_t::KernelDump: {
       printf(": Kernel Dump.\n");
       break;
     }
 
-    case FullDump: {
+    case DumpType_t::FullDump: {
       printf(": Full Dump.\n");
       break;
     }
-    case BMPDump: {
+    case DumpType_t::BMPDump: {
       printf(": BMP Dump.\n");
       break;
     }
@@ -147,28 +136,27 @@ struct DisplayUtils {
 // https://github.com/google/rekall/blob/master/rekall-core/rekall/plugins/overlays/windows/crashdump.py
 //
 
-struct KDMP_PARSER_PHYSMEM_RUN : public DisplayUtils {
+struct PHYSMEM_RUN : public DisplayUtils {
   uint64_t BasePage;
   uint64_t PageCount;
 
   void Show(const uint32_t Prefix = 0) const {
-    DISPLAY_HEADER("PHYSICAL_MEMORY_RUN");
+    DISPLAY_HEADER("PHYSMEM_RUN");
     DISPLAY_FIELD(BasePage);
     DISPLAY_FIELD(PageCount);
   }
 };
 
-static_assert(sizeof(KDMP_PARSER_PHYSMEM_RUN) == 0x10,
-              "PHYSICAL_MEMORY_RUN's size looks wrong.");
+static_assert(sizeof(PHYSMEM_RUN) == 0x10, "PHYSMEM_RUN's size looks wrong.");
 
-struct KDMP_PARSER_PHYSMEM_DESC : public DisplayUtils {
+struct PHYSMEM_DESC : public DisplayUtils {
   uint32_t NumberOfRuns;
   uint32_t Padding0;
   uint64_t NumberOfPages;
-  KDMP_PARSER_PHYSMEM_RUN Run[1];
+  PHYSMEM_RUN Run[1];
 
   void Show(const uint32_t Prefix = 0) const {
-    DISPLAY_HEADER("PHYSICAL_MEMORY_DESCRIPTOR");
+    DISPLAY_HEADER("PHYSMEM_DESC");
     DISPLAY_FIELD(NumberOfRuns);
     DISPLAY_FIELD(NumberOfPages);
     DISPLAY_FIELD_OFFSET(Run);
@@ -190,12 +178,13 @@ struct KDMP_PARSER_PHYSMEM_DESC : public DisplayUtils {
   }
 };
 
-static_assert(sizeof(KDMP_PARSER_PHYSMEM_DESC) == 0x20,
+static_assert(sizeof(PHYSMEM_DESC) == 0x20,
               "PHYSICAL_MEMORY_DESCRIPTOR's size looks wrong.");
 
-struct KDMP_PARSER_BMP_HEADER64 : public DisplayUtils {
-  static const uint32_t ExpectedSignature = 0x504D4453; // 'PMDS'
-  static const uint32_t ExpectedValidDump = 0x504D5544; // 'PMUD'
+struct BMP_HEADER64 : public DisplayUtils {
+  static const uint32_t ExpectedSignature = 0x504D4453;  // 'PMDS'
+  static const uint32_t ExpectedSignature2 = 0x504D4446; // 'PMDF'
+  static const uint32_t ExpectedValidDump = 0x504D5544;  // 'PMUD'
 
   //
   // Should be FDMP.
@@ -248,13 +237,13 @@ struct KDMP_PARSER_BMP_HEADER64 : public DisplayUtils {
     // Integrity check the headers.
     //
 
-    if (Signature != ExpectedSignature) {
-      printf("KDMP_PARSER_BMP_HEADER64::Signature looks wrong.\n");
+    if (Signature != ExpectedSignature && Signature != ExpectedSignature2) {
+      printf("BMP_HEADER64::Signature looks wrong.\n");
       return false;
     }
 
     if (ValidDump != ExpectedValidDump) {
-      printf("KDMP_PARSER_BMP_HEADER64::ValidDump looks wrong.\n");
+      printf("BMP_HEADER64::ValidDump looks wrong.\n");
       return false;
     }
 
@@ -262,7 +251,7 @@ struct KDMP_PARSER_BMP_HEADER64 : public DisplayUtils {
   }
 
   void Show(const uint32_t Prefix = 0) const {
-    DISPLAY_HEADER("KDMP_PARSER_BMP_HEADER64");
+    DISPLAY_HEADER("BMP_HEADER64");
     DISPLAY_FIELD(Signature);
     DISPLAY_FIELD(ValidDump);
     DISPLAY_FIELD(FirstPage);
@@ -272,10 +261,10 @@ struct KDMP_PARSER_BMP_HEADER64 : public DisplayUtils {
   }
 };
 
-static_assert(offsetof(KDMP_PARSER_BMP_HEADER64, FirstPage) == 0x20,
+static_assert(offsetof(BMP_HEADER64, FirstPage) == 0x20,
               "First page offset looks wrong.");
 
-struct KDMP_PARSER_CONTEXT : public DisplayUtils {
+struct CONTEXT : public DisplayUtils {
 
   //
   // Note that the below definition has been stolen directly from the windows
@@ -414,7 +403,7 @@ struct KDMP_PARSER_CONTEXT : public DisplayUtils {
     //
 
     if (MxCsr != MxCsr2) {
-      printf("KDMP_PARSER_CONTEXT::MxCsr doesn't match MxCsr2.\n");
+      printf("CONTEXT::MxCsr doesn't match MxCsr2.\n");
       return false;
     }
 
@@ -422,7 +411,7 @@ struct KDMP_PARSER_CONTEXT : public DisplayUtils {
   }
 
   void Show(const uint32_t Prefix = 0) const {
-    DISPLAY_HEADER("KDMP_PARSER_CONTEXT");
+    DISPLAY_HEADER("CONTEXT");
     DISPLAY_FIELD(P1Home);
     DISPLAY_FIELD(P2Home);
     DISPLAY_FIELD(P3Home);
@@ -546,17 +535,17 @@ struct KDMP_PARSER_CONTEXT : public DisplayUtils {
   }
 };
 
-static_assert(offsetof(KDMP_PARSER_CONTEXT, Xmm0) == 0x1a0,
+static_assert(offsetof(CONTEXT, Xmm0) == 0x1a0,
               "The offset of Xmm0 looks wrong.");
 
-struct KDMP_PARSER_EXCEPTION_RECORD64 : public DisplayUtils {
+struct EXCEPTION_RECORD64 : public DisplayUtils {
   uint32_t ExceptionCode;
   uint32_t ExceptionFlags;
   uint64_t ExceptionRecord;
   uint64_t ExceptionAddress;
   uint32_t NumberParameters;
   uint32_t __unusedAlignment;
-  uint64_t ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
+  uint64_t ExceptionInformation[15];
 
   void Show(const uint32_t Prefix = 0) const {
     DISPLAY_HEADER("KDMP_PARSER_EXCEPTION_RECORD64");
@@ -583,11 +572,10 @@ struct KDMP_PARSER_EXCEPTION_RECORD64 : public DisplayUtils {
   }
 };
 
-static_assert(sizeof(KDMP_PARSER_EXCEPTION_RECORD64) ==
-                  sizeof(EXCEPTION_RECORD64),
+static_assert(sizeof(EXCEPTION_RECORD64) == 0x98,
               "KDMP_PARSER_EXCEPTION_RECORD64's size looks wrong.");
 
-struct KDMP_PARSER_HEADER64 : public DisplayUtils {
+struct HEADER64 : public DisplayUtils {
   static const uint32_t ExpectedSignature = 0x45474150; // 'EGAP'
   static const uint32_t ExpectedValidDump = 0x34365544; // '46UD'
 
@@ -620,7 +608,7 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
 
   uint8_t Padding1[0x80 - (0x40 + sizeof(BugCheckCodeParameter))];
   uint64_t KdDebuggerDataBlock;
-  KDMP_PARSER_PHYSMEM_DESC PhysicalMemoryBlockBuffer;
+  PHYSMEM_DESC PhysicalMemoryBlockBuffer;
 
   //
   // According to rekall there's a gap here:
@@ -629,7 +617,7 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
   //
 
   uint8_t Padding2[0x348 - (0x88 + sizeof(PhysicalMemoryBlockBuffer))];
-  KDMP_PARSER_CONTEXT ContextRecord;
+  CONTEXT ContextRecord;
 
   //
   // According to rekall there's a gap here:
@@ -638,7 +626,7 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
   //
 
   uint8_t Padding3[0xf00 - (0x348 + sizeof(ContextRecord))];
-  KDMP_PARSER_EXCEPTION_RECORD64 Exception;
+  EXCEPTION_RECORD64 Exception;
   DumpType_t DumpType;
 
   //
@@ -660,7 +648,7 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
   uint8_t KdSecondaryVersion;
   uint8_t Unused[2];
   uint8_t _reserved0[4016];
-  KDMP_PARSER_BMP_HEADER64 BmpHeader;
+  BMP_HEADER64 BmpHeader;
 
   bool LooksGood() const {
 
@@ -669,12 +657,12 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
     //
 
     if (Signature != ExpectedSignature) {
-      printf("KDMP_PARSER_HEADER64::Signature looks wrong.\n");
+      printf("HEADER64::Signature looks wrong.\n");
       return false;
     }
 
     if (ValidDump != ExpectedValidDump) {
-      printf("KDMP_PARSER_HEADER64::ValidDump looks wrong.\n");
+      printf("HEADER64::ValidDump looks wrong.\n");
       return false;
     }
 
@@ -682,12 +670,12 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
     // Make sure it's a dump type we know how to handle.
     //
 
-    if (DumpType == FullDump) {
+    if (DumpType == DumpType_t::FullDump) {
       if (!PhysicalMemoryBlockBuffer.LooksGood()) {
         printf("The PhysicalMemoryBlockBuffer looks wrong.\n");
         return false;
       }
-    } else if (DumpType == BMPDump) {
+    } else if (DumpType == DumpType_t::BMPDump) {
       if (!BmpHeader.LooksGood()) {
         printf("The BmpHeader looks wrong.\n");
         return false;
@@ -706,7 +694,7 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
   }
 
   void Show(const uint32_t Prefix = 0) const {
-    DISPLAY_HEADER("KDMP_PARSER_HEADER64");
+    DISPLAY_HEADER("HEADER64");
     DISPLAY_FIELD(Signature);
     DISPLAY_FIELD(ValidDump);
     DISPLAY_FIELD(MajorVersion);
@@ -737,7 +725,7 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
     DISPLAY_FIELD(SuiteMask);
     DISPLAY_FIELD(WriterStatus);
     DISPLAY_FIELD(KdSecondaryVersion);
-    if (DumpType == BMPDump) {
+    if (DumpType == DumpType_t::BMPDump) {
       DISPLAY_FIELD_OFFSET(BmpHeader);
       BmpHeader.Show();
     }
@@ -762,20 +750,86 @@ struct KDMP_PARSER_HEADER64 : public DisplayUtils {
 // layout, so hopefully they prevent any regressions regarding the layout.
 //
 
-static_assert(offsetof(KDMP_PARSER_HEADER64, BugCheckCodeParameter) == 0x40,
+static_assert(offsetof(HEADER64, BugCheckCodeParameter) == 0x40,
               "The offset of KdDebuggerDataBlock looks wrong.");
 
-static_assert(offsetof(KDMP_PARSER_HEADER64, KdDebuggerDataBlock) == 0x80,
+static_assert(offsetof(HEADER64, KdDebuggerDataBlock) == 0x80,
               "The offset of KdDebuggerDataBlock looks wrong.");
 
-static_assert(offsetof(KDMP_PARSER_HEADER64, ContextRecord) == 0x348,
+static_assert(offsetof(HEADER64, ContextRecord) == 0x348,
               "The offset of ContextRecord looks wrong.");
 
-static_assert(offsetof(KDMP_PARSER_HEADER64, Exception) == 0xf00,
+static_assert(offsetof(HEADER64, Exception) == 0xf00,
               "The offset of Exception looks wrong.");
 
-static_assert(offsetof(KDMP_PARSER_HEADER64, Comment) == 0xfb0,
+static_assert(offsetof(HEADER64, Comment) == 0xfb0,
               "The offset of Comment looks wrong.");
 
-static_assert(offsetof(KDMP_PARSER_HEADER64, BmpHeader) == 0x2000,
+static_assert(offsetof(HEADER64, BmpHeader) == 0x2000,
               "The offset of BmpHeaders looks wrong.");
+
+struct Page {
+
+  //
+  // Page size.
+  //
+
+  static const uint64_t Size = 0x1000;
+
+  //
+  // Page align an address.
+  //
+
+  static uint64_t Align(const uint64_t Address) { return Address & ~0xfff; }
+
+  //
+  // Extract the page offset off an address.
+  //
+
+  static uint64_t Offset(const uint64_t Address) { return Address & 0xfff; }
+};
+
+//
+// Structure for parsing a PTE.
+//
+
+union MMPTE_HARDWARE {
+  struct {
+    uint64_t Present : 1;
+    uint64_t Write : 1;
+    uint64_t UserAccessible : 1;
+    uint64_t WriteThrough : 1;
+    uint64_t CacheDisable : 1;
+    uint64_t Accessed : 1;
+    uint64_t Dirty : 1;
+    uint64_t LargePage : 1;
+    uint64_t Available : 4;
+    uint64_t PageFrameNumber : 36;
+    uint64_t ReservedForHardware : 4;
+    uint64_t ReservedForSoftware : 11;
+    uint64_t NoExecute : 1;
+  } u;
+  uint64_t AsUINT64;
+  MMPTE_HARDWARE(const uint64_t Value) : AsUINT64(Value) {}
+};
+
+//
+// Structure to parse a virtual address.
+//
+
+union VIRTUAL_ADDRESS {
+  struct {
+    uint64_t Offset : 12;
+    uint64_t PtIndex : 9;
+    uint64_t PdIndex : 9;
+    uint64_t PdPtIndex : 9;
+    uint64_t Pml4Index : 9;
+    uint64_t Reserved : 16;
+  } u;
+  uint64_t AsUINT64;
+  VIRTUAL_ADDRESS(const uint64_t Value) : AsUINT64(Value) {}
+};
+
+static_assert(sizeof(MMPTE_HARDWARE) == 8);
+static_assert(sizeof(VIRTUAL_ADDRESS) == 8);
+} // namespace kdmpparser
